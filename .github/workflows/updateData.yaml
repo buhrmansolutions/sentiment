@@ -17,7 +17,7 @@ jobs:
       - name: Installera Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18" # välj den version du behöver
+          node-version: "20" # välj den version du behöver
 
       - name: Installera beroenden
         run: npm install
