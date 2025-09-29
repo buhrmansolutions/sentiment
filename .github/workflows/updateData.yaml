@@ -21,10 +21,10 @@ jobs:
 
       - name: Kör scriptet och spara logg
         run: |
-          node insertNewdata.js > output.log 2>&1
+          node insertNewData.js > output.log 2>&1
 
       - name: Ladda upp logg som artefakt
         uses: actions/upload-artifact@v4
         with:
-          name: insertNewdata-log
+          name: insertNewData-log
           path: output.log
