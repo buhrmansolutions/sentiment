@@ -19,5 +19,8 @@ jobs:
         with:
           node-version: "18" # välj den version du behöver
 
+      - name: Installera beroenden
+        run: npm install
+
       - name: Kör scriptet
         run: node insertNewData.js
