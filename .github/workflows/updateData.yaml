@@ -1,0 +1,30 @@
+# .github/workflows/hourly.yml
+name: Update Data
+
+on:
+  schedule:
+    - cron: "0 * * * *" # körs varje hel timme (UTC)
+  workflow_dispatch: # så du kan starta manuellt också
+
+jobs:
+  run-hourly-task:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checka ut koden
+        uses: actions/checkout@v4
+
+      - name: Installera Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18" # välj den version du behöver
+
+      - name: Kör scriptet och spara logg
+        run: |
+          node insertNewdata.js > output.log 2>&1
+
+      - name: Ladda upp logg som artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: insertNewdata-log
+          path: output.log

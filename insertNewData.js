@@ -3,16 +3,18 @@ const cheerio = require("cheerio");
 const { createClient } = require("@supabase/supabase-js");
 const { NEGATIVES } = require("./negativeWords");
 const { POSITIVES } = require("./positiveWords");
+const { TEAMS } = require("./teams");
 
 const supabaseUrl = "https://zhsxmmrlucdpsgtfqspz.supabase.co";
 const supabaseKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpoc3htbXJsdWNkcHNndGZxc3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMDc2NDEsImV4cCI6MjA3Mzg4MzY0MX0.YyzfyCqomzAGS2PtJ9aHG-Uzr5rQKhjGxPatKo_M9qA";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function getLatestEntry() {
+async function getLatestEntry(team, table) {
   const { data, error } = await supabase
-    .from("sentiment")
+    .from(table)
     .select("*")
+    .eq("team", team)
     .order("date", { ascending: false })
     .limit(1);
 
@@ -24,13 +26,14 @@ async function getLatestEntry() {
   return data[0];
 }
 
-async function main() {
-  const { date: latestFetch } = await getLatestEntry();
+async function generateData(team, table, getFormattedDate) {
+  const latestEntry = await getLatestEntry(team.name, table);
 
   const sentiment = ({ textContent, date }) => {
     let result = {
       score: 0,
       date,
+      text: "",
     };
 
     function escapeRegex(word) {
@@ -47,6 +50,7 @@ async function main() {
     });
 
     result.score = positiveWords.length - negativeWords.length;
+    result.text = textContent?.substring(0, 10) ?? "";
 
     return result;
   };
@@ -76,19 +80,19 @@ async function main() {
     return texts;
   }
 
-  let results = [];
-  let page = 0;
-  let hasReachedLatestEntry = false;
-
   async function fetchAllTexts() {
+    let results = [];
+    let page = 1;
+    let hasReachedLatestEntry = false;
     do {
-      const texts = await getTextsFromUrl(
-        `https://www.svenskafans.com/fotboll/lag/mff/forum/${page}`
-      );
+      const texts = await getTextsFromUrl(`${team.url}/${page}`);
 
-      const latestEntryIndex = texts.findIndex(
-        (text) => text.date === latestFetch
-      );
+      const latestEntryIndex = latestEntry
+        ? texts.findIndex(
+            (text) =>
+              text.textContent?.substring(0, 10) === latestEntry.latestFetch
+          )
+        : 1;
 
       const shortenedTextsArray = texts.slice(
         0,
@@ -105,38 +109,84 @@ async function main() {
       hasReachedLatestEntry = latestEntryIndex !== -1;
       page++;
     } while (!hasReachedLatestEntry);
+    return results;
   }
 
-  fetchAllTexts().then(async () => {
-    const timeline = results.reduce(
-      (prev, curr) => ({
-        ...prev,
-        [curr.date]: [...(prev[curr.date] ?? []), curr.score],
-      }),
-      {}
-    );
-    const fixedTimeline = Object.entries(timeline).map(([time, values]) => ({
-      date: time,
-      value:
-        values.reduce((tot, val) => {
-          if (val > 0) return tot + 1;
-          if (val < 0) return tot - 1;
-          return tot;
-        }, 0) / values.length,
-      source: "svenskafans1234",
-      team: "Malmö FF",
-    }));
+  const results = await fetchAllTexts();
 
-    console.log({ fixedTimeline });
+  const timeline = results.reduce((prev, curr) => {
+    const formattedDate = getFormattedDate(curr.date);
+    return {
+      ...prev,
+      [formattedDate]: [...(prev[formattedDate] ?? []), curr.score],
+    };
+  }, {});
+
+  const fixedTimeline = Object.entries(timeline).map(([time, values]) => {
+    let timeHasExistingDbValues = false;
+    if (latestEntry?.date === time) {
+      timeHasExistingDbValues = true;
+    }
+
+    const totalNumberOfEntries =
+      values.length +
+      (timeHasExistingDbValues ? latestEntry?.numberOfEntries : 0);
+
+    const newValues = values.reduce((tot, val) => {
+      if (val > 0) return tot + 1;
+      if (val < 0) return tot - 1;
+      return tot;
+    }, 0);
+
+    const totalValueForEntry =
+      (timeHasExistingDbValues
+        ? latestEntry?.value * latestEntry?.numberOfEntries
+        : 0) + newValues;
+
+    return {
+      date: time,
+      value: totalValueForEntry / totalNumberOfEntries,
+      numberOfEntries: totalNumberOfEntries,
+      source: team.source,
+      team: team.name,
+      latestFetch: results[0].text,
+    };
+  });
+  console.log({ team, table }, fixedTimeline);
+  fixedTimeline.forEach(async (timelineEntry) => {
     try {
-      const { data, error } = await supabase
-        .from("sentiment")
-        .insert(fixedTimeline);
-      if (error) console.error("Supabase error:", error);
-      else console.log("Data inserted:", data);
+      if (latestEntry?.id && latestEntry.date === timelineEntry.date) {
+        const { data, error } = await supabase
+          .from(table)
+          .update(timelineEntry)
+          .eq("id", latestEntry.id);
+        if (error) console.error("Supabase error:", error);
+        else console.log("Data inserted:", data);
+      } else {
+        const { data, error } = await supabase
+          .from(table)
+          .insert(timelineEntry);
+        if (error) console.error("Supabase error:", error);
+        else console.log("Data inserted:", data);
+      }
     } catch (err) {
       console.error(err);
     }
+  });
+}
+
+async function main() {
+  TEAMS.forEach((team) => {
+    generateData(team, "hourly", (date) => `${date.split(":")[0]}:00`);
+    generateData(team, "daily", (date) => date.split(",")[0]);
+    generateData(team, "weekly", (date) => {
+      const d = new Date(date);
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+      return weekNum;
+    });
   });
 }
 

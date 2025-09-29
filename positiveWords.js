@@ -59,6 +59,7 @@ const POSITIVES = [
   "snabb",
   "teknisk",
   "perfekt",
+  "skönt",
 ];
 
 module.exports = {
