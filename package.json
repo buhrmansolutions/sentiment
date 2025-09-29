@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "cheerio": "^1.1.2",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "sentiment": "^5.0.2",
     "sentiment-swedish": "^1.1.0"

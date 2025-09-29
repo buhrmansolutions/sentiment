@@ -1,4 +1,5 @@
 const cheerio = require("cheerio");
+require("dotenv").config();
 
 const { createClient } = require("@supabase/supabase-js");
 const { NEGATIVES } = require("./negativeWords");
@@ -6,8 +7,8 @@ const { POSITIVES } = require("./positiveWords");
 const { TEAMS } = require("./teams");
 
 const supabaseUrl = "https://zhsxmmrlucdpsgtfqspz.supabase.co";
-const supabaseKey =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpoc3htbXJsdWNkcHNndGZxc3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMDc2NDEsImV4cCI6MjA3Mzg4MzY0MX0.YyzfyCqomzAGS2PtJ9aHG-Uzr5rQKhjGxPatKo_M9qA";
+console.log("process", process.env);
+const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function getLatestEntry(team, table) {

@@ -23,4 +23,6 @@ jobs:
         run: npm install
 
       - name: Kör scriptet
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: node insertNewData.js
